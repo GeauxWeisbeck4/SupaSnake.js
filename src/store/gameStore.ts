@@ -17,6 +17,7 @@ interface GameState {
     snake: Position[];
     food: Position;
     direction: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT';
+    nextDirection: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT';
     score: number;
     gameOver: boolean;
     isPlaying: boolean;
@@ -28,21 +29,30 @@ interface GameState {
 
 const GRID_SIZE = 20;
 
-const createFood = (): Position => ({
-    x: Math.floor(Math.random() * GRID_SIZE),
-    y: Math.floor(Math.random() * GRID_SIZE),
-});
-
-const initialSnake = [
+const createInitialSnake = (): Position[] => [
     { x: 10, y: 10 },
     { x: 10, y: 11 },
     { x: 10, y: 12 },
 ];
 
+const createFood = (snake: Position[]): Position => {
+    let position: Position;
+
+    do {
+        position = {
+            x: Math.floor(Math.random() * GRID_SIZE),
+            y: Math.floor(Math.random() * GRID_SIZE),
+        };
+    } while (snake.some((segment) => segment.x === position.x && segment.y === position.y));
+
+    return position;
+};
+
 export const useGameStore = create<GameState>((set, get) => ({
-    snake: initialSnake,
-    food: createFood(),
+    snake: createInitialSnake(),
+    food: createFood(createInitialSnake()),
     direction: 'UP',
+    nextDirection: 'UP',
     score: 0,
     gameOver: false,
     isPlaying: false,
@@ -57,14 +67,15 @@ export const useGameStore = create<GameState>((set, get) => ({
         };
 
         if (opposites[newDirection] !== direction) {
-            set({ direction: newDirection });
+            set({ nextDirection: newDirection });
         }
     },
 
     moveSnake: () => {
-        const { snake, food, direction, gameOver } = get();
+        const { snake, food, nextDirection, gameOver } = get();
         if (gameOver) return;
 
+        const direction = nextDirection;
         const head = { ...snake[0] };
 
         switch (direction) {
@@ -82,45 +93,43 @@ export const useGameStore = create<GameState>((set, get) => ({
                 break;
         }
 
-        // Check for collisions with wall
         if (
             head.x < 0 ||
             head.x >= GRID_SIZE ||
             head.y < 0 ||
             head.y >= GRID_SIZE
         ) {
-            set({ gameOver: true });
+            set({ gameOver: true, isPlaying: false });
             return;
         }
 
-        // Check for collisions with self
         if (snake.some((segment) => segment.x === head.x && segment.y === head.y)) {
-            set({ gameOver: true });
+            set({ gameOver: true, isPlaying: false });
             return;
         }
 
-        const newSnake = [head];
         const ateFood = head.x === food.x && head.y === food.y;
+        const newSnake = ateFood ? [head, ...snake] : [head, ...snake.slice(0, -1)];
 
-        // If snake ateFood, don't remove tail and generate new food
+        set({ snake: newSnake, direction });
+
         if (ateFood) {
-            newSnake.push(...snake);
             set((state) => ({
-                food: createFood(),
+                food: createFood(newSnake),
                 score: state.score + 10,
             }));
-        } else {
-            newSnake.push(...snake.slice(0, -1));
         }
-
-        set({ snake: newSnake });
     },
 
     startGame: () => {
+        const freshSnake = createInitialSnake();
+
         set({
-            snake: initialSnake,
-            food: createFood(),
+            snake: freshSnake,
+            food: createFood(freshSnake),
             direction: 'UP',
+            nextDirection: 'UP',
+            score: 0,
             gameOver: false,
             isPlaying: true,
         });
